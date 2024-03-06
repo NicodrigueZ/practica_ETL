@@ -1,0 +1,228 @@
+---
+title: "Covid ETL"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-03-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+knitr::opts_knit$set(root.dir = "C:/Users/Facundo/Desktop/UNO/DS/ETL/Covid/DataSet")
+getwd()
+```
+
+| **ETL (Extraer, Transformar, Cargar)**
+| 
+| **El siguiente documento tiene como objetivo explicar el proceso de ETL realizado en base a mis conocimientos actuales, el resultado obtenido puede no ser muy bueno en su totalidad, en caso de encontrar fallas en el analisis la documentacion queda adjuntada con el codigo realizado en RStudio para su correccion de parte de cualquier persona que posea los conocimientos adecuados.**
+
+\-\--
+
+**Primero hacemos el cargado de las librerias/bibliotecas y el set de datos.**
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyquant)
+library(readr)
+library(plotly)
+library(webshot)
+library(orca)
+library(corrplot)
+library(dplyr)
+
+getwd()
+
+datos <- COVID_19_Global_Statistics_Dataset <- read_csv("COVID-19 Global Statistics Dataset.csv")
+attach(datos)
+
+```
+
+\-\--
+
+**El frame de datos a trabajar almacena diversas categorias de casos de covid agrupadas por cada Pais. Entre las variables encontramos las siguientes: Pais, Casos Totales, Casos Nuevos, Muertes Totales, Muertes Nuevas, Recuperados Totales, Nuevos Recuperados, Casos Activos, Casos Serios/Criticos, Casos Infantiles por millon, Muertes por cada millon, Test Totales, Test por cada millon y Poblacion. Aclaracion no se encontro un diccionario de datos que explique de forma detallada lo que significa cada variable.**
+
+```{r}
+head(datos)
+```
+
+\-\--
+
+**Normalizamos la informacion estandarizando el idioma de las variables junto a una conversion de tipo de dato y removemos los caracteres especiales como lo son las "," .**
+
+```{r}
+datos_normalizados <- c("Pais","Casos Totales","Casos Nuevos","Muertes Totales"
+                        ,"Muertes Nuevas","Recuperados Totales","Nuevos Recuperados"
+                        ,"Casos Activos","Casos Serios/Criticos"," Casos Infantiles c/1Millon"
+                        ,"Muertes c/1Millon","Test Totales","Test c/1Millon","Poblacion")
+
+names(datos) <- datos_normalizados
+
+#datos <- datos[,-1]
+datos$Pais <- as.character(gsub(",","",datos$Pais))
+datos$`Casos Totales` <- as.numeric(gsub(",","",datos$`Casos Totales`))
+datos$`Casos Nuevos` <- as.numeric(gsub(",","",datos$`Casos Nuevos` ))
+datos$`Muertes Totales` <- as.numeric(gsub(",","",datos$`Muertes Totales`))
+datos$`Muertes Nuevas` <- as.numeric(gsub(",","",datos$`Muertes Nuevas`))
+datos$`Recuperados Totales` <- as.numeric(gsub(",","",datos$`Recuperados Totales` ))
+datos$`Nuevos Recuperados` <- as.numeric(gsub(",","",datos$`Nuevos Recuperados`))
+datos$`Casos Activos` <- as.numeric(gsub(",","",datos$`Casos Activos`))
+datos$`Casos Serios/Criticos` <- as.numeric(gsub(",","",datos$`Casos Serios/Criticos`))
+datos$` Casos Infantiles c/1Millon` <- as.numeric(gsub(",","",datos$` Casos Infantiles c/1Millon`))
+datos$`Muertes c/1Millon` <- as.numeric(gsub(",","",datos$`Muertes c/1Millon`))
+datos$`Test Totales` <- as.numeric(gsub(",","",datos$`Test Totales`))
+datos$`Test c/1Millon` <- as.numeric(gsub(",","",datos$`Test c/1Millon`))
+datos$Poblacion <- as.numeric(gsub(",","",datos$Poblacion))
+
+str(datos)
+```
+
+\-\--
+
+**Indagando por el set de datos se puede observar un valor anomalo en la variable "Casos Activos" siendo este -1. Es un valor anomalo porque estamos trabajando con cantidades reales nosotros no podemos tener casos de covid negativos si nos referimos a totales por eso debe ser eliminado.**
+
+```{r}
+summary(datos[,'Casos Activos'])
+datos <- datos[-82,]
+```
+
+\-\--
+
+**Verificamos si existen valores NA en nuestro set de datos, en este caso podemos ver que los hay en gran cantidad en casi todas las variables.**
+
+```{r}
+sapply(datos , function(x) sum(is.na(x)))
+```
+
+\-\--
+
+**La presencia de estos valores faltantes en gran medida llega a ser un problema por la siguiente razon:**
+
+\-\--
+
+***(Observaciones del set de datos original)***
+
+```{r}
+# Observaciones del set de datos original
+nrow(datos)
+```
+
+\-\--
+
+**Al momento de realizar la limpieza vemos que pasamos de tener 238 observaciones a solamente 1 siendo una perdida del 99% de la informacion total.**
+
+```{r}
+# Observaciones del set de datos limpio de NA's
+clean_datos <- na.omit(datos)
+nrow(clean_datos)
+```
+
+\-\--
+
+**Si no existe un mejor set de datos en el cual trabajar lo que podemos hacer para resolver este problema es lo siguiente:**
+
+**Podemos sacar el porcentaje que representa los valores perdidos existentes en cada variable para ello primero debemos conseguir la cantidad de valores nulos en cada variable individualmente para luego dividirlo por la cantidad de observaciones en el set de datos.**
+
+\-\--
+
+**Aqui el resultado:**
+
+```{r}
+#VEMOS PORCENTAJE DE NA'S POR VARIABLE
+
+# sum(is.na(datos$Pais))/nrow(datos)                               0.0
+# sum(is.na(datos$`Casos Totales`))/nrow(datos)                    0.0
+# sum(is.na(datos$`Casos Nuevos`))/nrow(datos)                     0.94
+# sum(is.na(datos$`Muertes Totales`))/nrow(datos)                  0.02
+# sum(is.na(datos$`Muertes Nuevas`))/nrow(datos)                   0.97
+# sum(is.na(datos$`Recuperados Totales`))/nrow(datos)              0.20
+# sum(is.na(datos$`Nuevos Recuperados`))/nrow(datos)               0.92
+# sum(is.na(datos$`Casos Activos`))/nrow(datos)                    0.20
+# sum(is.na(datos$`Casos Serios/Criticos`))/nrow(datos)            0.74
+# sum(is.na(datos$` Casos Infantiles c/1Millon`))/nrow(datos)      0.03
+# sum(is.na(datos$`Muertes c/1Millon`))/nrow(datos)                0.05
+# sum(is.na(datos$`Test Totales`))/nrow(datos)                     0.10
+# sum(is.na(datos$`Test c/1Millon`))/nrow(datos)                   0.10
+```
+
+\-\--
+
+**Ahora que sabemos el porcentaje de cada variable podemos definir un criterio para eliminar algunas, el cual sera remover aquellas que posean un porcentaje igual o superior al 50%.**
+
+\-\--
+
+**Aqui tenemos las variables que cumplen ese criterio:**
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+sum(is.na(datos$`Casos Nuevos`))/nrow(datos)  
+sum(is.na(datos$`Muertes Nuevas`))/nrow(datos)
+sum(is.na(datos$`Nuevos Recuperados`))/nrow(datos) 
+sum(is.na(datos$`Casos Serios/Criticos`))/nrow(datos) 
+```
+
+\-\--
+
+**Eliminamos aquellas variables que cumplan con el criterio y comparamos resultados.**
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+newdatos <- datos[,-c(3,5,7,9)] 
+clean_datos_wtv <- na.omit(newdatos)
+```
+
+\-\--
+
+***Observaciones del set de datos sin limpiar:***
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+nrow(datos)
+```
+
+\-\--
+
+***Observaciones del set de datos limpio***
+
+```{r}
+nrow(clean_datos)
+```
+
+\-\--
+
+***Observaciones del set de datos limpio con el criterio:***
+
+```{r}
+nrow(clean_datos_wtv)
+```
+
+\-\--
+
+**Podemos notar que ahora solamente perdemos un 29.83% de los datos sacando cuentas salvamos un 70.17% de la informacion total por ende el criterio que aplicamos fue bastante efectivo.**
+
+\-\--
+
+**En conclusion, esta es la tecnica que utilizaria para salvar la informacion en caso de una perdida masiva en el proceso de ETL, sin embargo, no es la unica forma de hacerlo ya que podriamos contar con otro set de datos mas estable en cuanto a valores NULOS o se podria utilizar tecnicas de promedio si se trabajara con datos numericos como es en este caso.**
+
+\-\--
+
+**Para finalizar el analisis como apartado extra dejo una matriz de correlacion del data frame original y el que hicimos con el criterio.**
+
+\-\--
+
+**La matriz de correlacion no responde bien al data frame original debido a la inmensa cantidad de valores nulos.**
+
+```{r}
+corr_datos <- cor(datos[,-1])
+corrplot(corr_datos, method = 'number')
+corrplot(corr_datos, method = 'circle')
+```
+
+\-\--
+
+**La matriz de correlacion sin aquellas variables con una gran de valores nulos se puede realizar de forma exitosa.**
+
+```{r}
+corr_datos_2 <- cor(clean_datos_wtv[,-1])
+corrplot(corr_datos_2, method = 'number')
+corrplot(corr_datos_2, method = 'circle')
+```
