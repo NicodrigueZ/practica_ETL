@@ -1,4 +1,3 @@
 # Proyectos Data Analyst
 
-El objetivo de este repositorio es almacenar pequeños proyectos hechos por mi con el fin de demostrar mis capacidades en el area y poder adquirir nuevos conocimientos 
-para algun dia ser un Data Scientist
+El siguiente Script contiene una pequeña practica de ETL haciendo una pequeña limpieza de datos en un set de datos de Netflix aplicando una serie de criterios propios. 
